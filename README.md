@@ -1,66 +1,8 @@
-## Foundry
+# Neighbours-DAO
+## testing
+This is a testing space for the future implementations of the Neighbors-DAO, for Homework 5 in the Solidity class for the Masters in Digital Economics. It will implement tokens ($NGT & $NRT), with the desired properties, before pushing them into the main branch, present in this repository: [Neighbours-DAO](https://github.com/Tiny-boot/Neighbours-DAO)
 
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
+In this testing space, the goal is to try different implementations of the two tokens, as well as try to make the two contracts interact with each other.
 
-Foundry consists of:
+The tokens are largely based on the OpenZeppellin ERC20 models. The references to the contracts and the inspirations are given in the comments on the top of the contracts themselves.
 
--   **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
--   **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
--   **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
--   **Chisel**: Fast, utilitarian, and verbose solidity REPL.
-
-## Documentation
-
-https://book.getfoundry.sh/
-
-## Usage
-
-### Build
-
-```shell
-$ forge build
-```
-
-### Test
-
-```shell
-$ forge test
-```
-
-### Format
-
-```shell
-$ forge fmt
-```
-
-### Gas Snapshots
-
-```shell
-$ forge snapshot
-```
-
-### Anvil
-
-```shell
-$ anvil
-```
-
-### Deploy
-
-```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
-```
-
-### Cast
-
-```shell
-$ cast <subcommand>
-```
-
-### Help
-
-```shell
-$ forge --help
-$ anvil --help
-$ cast --help
-```
