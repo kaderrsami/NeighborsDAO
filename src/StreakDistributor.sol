@@ -1,14 +1,8 @@
 // SPDX‑License‑Identifier: MIT
 pragma solidity ^0.8.24;
 
-import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
-
-// Define or import NeighborRewardToken
-interface NeighborRewardToken {
-    function transferFrom(address sender, address recipient, uint256 amount) external returns (bool);
-    function transfer(address recipient, uint256 amount) external returns (bool);
-}
+import "src/NRT.sol";
 
 /*───────────────────────────────────────────────────────────────────────────*\
  ░░  StreakDistributor  ░░    ─  quarterly “civic‑points” reward module   ░

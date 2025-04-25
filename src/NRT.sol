@@ -27,8 +27,11 @@ contract NeighborRewardToken is ERC20Burnable, AccessControl {
         CAP       = annualCap;
         yearStart = _startOfYear(block.timestamp);
 
+        // give both the named treasury *and* the deployer full admin & minting power:
         _grantRole(DEFAULT_ADMIN_ROLE, treasury);
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(TREASURY_ROLE,        treasury);
+        _grantRole(TREASURY_ROLE,        msg.sender);
     }
 
     /*---------------------------------------------------  MINT LOGIC  */
