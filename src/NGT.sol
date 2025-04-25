@@ -40,9 +40,11 @@ contract NeighborGovToken is
         CAP = _cap;
 
         // bootstrap roles
-        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
-        _grantRole(MINTER_ROLE,          msg.sender);
-        _grantRole(WHITELIST_ROLE,       cityRegistrar);
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);      // deployer can co-admin
+        _grantRole(DEFAULT_ADMIN_ROLE, cityRegistrar);   // city-registrar can co-admin
+        _grantRole(MINTER_ROLE,        msg.sender);      // deployer can mint
+        _grantRole(WHITELIST_ROLE,     cityRegistrar);   // registrar can whitelist
+        _grantRole(WHITELIST_ROLE,     msg.sender);      // deployer can also whitelist
 
         // registrar is always eligible
         _eligible[cityRegistrar] = true;
