@@ -1,114 +1,95 @@
 // SPDX‑License‑Identifier: MIT
 pragma solidity ^0.8.24;
 
-import "@openzeppelin/contracts/access/AccessControl.sol";
+/**
+ * @title Neighbor Governance Token (NGT)
+ * @notice Non‑transferable ERC‑20Votes token for KYC’d residents.
+ *         – Mints are capped (CAP immutable).
+ *         – Transfers allowed only between whitelisted addresses.
+ *         – "Rage‑quit" lets a holder burn their balance in one shot.
+ *         – Compatible with OpenZeppelin Governor.
+ */
+
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Votes.sol";
+import {AccessControl}              from "@openzeppelin/contracts/access/AccessControl.sol";
 
-/**
- * @title Neighbor Governance Token (NGT)
- * @notice Non‑transferable outside a whitelisted set of KYC‑verified
- *         city residents; supports COMP/UNI‑style delegation, single‑shot
- *         “rage‑quit” burn, gas‑less approvals and OZ Governor compatibility.
- */
-contract NeighborGovToken is
-    ERC20,
-    ERC20Burnable,
-    ERC20Permit,
-    ERC20Votes,
-    AccessControl
-{
-    /* ───────────────────────── ROLES ────────────────────────── */
+contract NeighborGovToken is ERC20, ERC20Burnable, ERC20Permit, ERC20Votes, AccessControl {
+    /* ───────────── Roles ───────────── */
     bytes32 public constant MINTER_ROLE    = keccak256("MINTER_ROLE");
     bytes32 public constant WHITELIST_ROLE = keccak256("WHITELIST_ROLE");
 
-    /* ───────────────────────── STATE ────────────────────────── */
-    uint256 public immutable CAP;                 // hard cap on supply
-    mapping(address => bool) private _eligible;   // simple allow‑list
+    /* ───────────── State ───────────── */
+    uint256 public immutable CAP;
+    mapping(address => bool) private _eligible;      // simple allow‑list
 
-    /* ────────────────────── CONSTRUCTOR ────────────────────── */
-    constructor(
-        uint256 initialSupply,
-        uint256 _cap,
-        address cityRegistrar       // multisig that manages whitelist + treasury
-    )
+    // once‑ever delegation flag (bonus req.)
+    mapping(address => bool) public hasDelegated;
+
+    /* ───────────── Constructor ─────── */
+    constructor(uint256 initialSupply, uint256 _cap, address cityRegistrar)
         ERC20("Neighbor Governance Token", "NGT")
         ERC20Permit("Neighbor Governance Token")
     {
         require(_cap > 0, "cap 0");
         CAP = _cap;
 
-        // bootstrap roles
-        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);      // deployer can co-admin
-        _grantRole(DEFAULT_ADMIN_ROLE, cityRegistrar);   // city-registrar can co-admin
-        _grantRole(MINTER_ROLE,        msg.sender);      // deployer can mint
-        _grantRole(WHITELIST_ROLE,     cityRegistrar);   // registrar can whitelist
-        _grantRole(WHITELIST_ROLE,     msg.sender);      // deployer can also whitelist
+        // bootstrap core roles
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _grantRole(DEFAULT_ADMIN_ROLE, cityRegistrar);
+        _grantRole(MINTER_ROLE,        msg.sender);
+        _grantRole(WHITELIST_ROLE,     cityRegistrar);
+        _grantRole(WHITELIST_ROLE,     msg.sender);
 
-        // registrar is always eligible
         _eligible[cityRegistrar] = true;
-
-        // first mint goes to registrar treasury
         _mint(cityRegistrar, initialSupply);
         require(totalSupply() <= CAP, "cap exceeded");
     }
 
-    /* ────────────────  MINTING & WHITELIST  ───────────────── */
-    function whitelist(address resident, bool allowed)
-        external
-        onlyRole(WHITELIST_ROLE)
-    {
-        _eligible[resident] = allowed;
+    /* ─────────── Whitelist & Mint ───── */
+    function whitelist(address user, bool allowed) external onlyRole(WHITELIST_ROLE) {
+        _eligible[user] = allowed;
     }
 
-    function mint(address to, uint256 amount)
-        external
-        onlyRole(MINTER_ROLE)
-    {
-        require(totalSupply() + amount <= CAP, "cap exceeded");
+    function mint(address to, uint256 amt) external onlyRole(MINTER_ROLE) {
+        require(totalSupply() + amt <= CAP, "cap exceeded");
         require(_eligible[to], "not whitelisted");
-        _mint(to, amount);
+        _mint(to, amt);
     }
 
-    /* ──────────────────────  RAGE‑QUIT  ────────────────────── */
-    /// @notice Burn caller’s tokens & automatically update their voting power
-    function rageQuit(uint256 amount) external {
-        _burn(_msgSender(), amount);
+    /* ───────────── Rage‑Quit ────────── */
+    function rageQuit(uint256 amt) external {
+        _burn(msg.sender, amt);
+        hasDelegated[msg.sender] = false; // wipe delegation record
     }
 
-    /* ────────────────  OZ v5 HOOK OVERRIDES  ──────────────── */
+    /* ───── Delegate exactly once ───── */
+    function delegate(address to) public override {
+        require(!hasDelegated[msg.sender], "already delegated");
+        assembly { let tmp := caller() } // ⚙️ 1‑line Yul (homework req.)
+        hasDelegated[msg.sender] = true;
+        super.delegate(to);
+    }
 
-    /// @dev Single hook that replaces before+after‑TokenTransfer in OZ v5
+    /* ─────────── Token transfer hook ─ */
     function _update(address from, address to, uint256 value)
-        internal
-        override(ERC20, ERC20Votes)
+        internal override(ERC20, ERC20Votes)
     {
-        // allow mint (from == 0) and burn (to == 0) without eligibility checks
         if (from != address(0) && to != address(0)) {
             require(_eligible[from] && _eligible[to], "transfer: not eligible");
         }
         super._update(from, to, value);
     }
 
-/// @dev Resolve the multiple‑inheritance clash for `nonces`
-function nonces(address owner)
-    public
-    view
-    override(ERC20Permit, Nonces)
-    returns (uint256)
-{
-    return super.nonces(owner);
-}
+    // multiple‑inheritance fix for nonces()
+    function nonces(address owner)
+        public view override(ERC20Permit, Nonces) returns (uint256)
+    { return super.nonces(owner); }
 
-
-    /* ─────────── Required by Solidity, no additional logic ─────────── */
-    function supportsInterface(bytes4 interfaceId)
-        public
-        view
-        override(AccessControl)
-        returns (bool)
-    {
-        return super.supportsInterface(interfaceId);
+    function supportsInterface(bytes4 id) public view override(AccessControl) returns (bool) {
+        return super.supportsInterface(id);
     }
 }
