@@ -50,8 +50,10 @@ contract StreakDistributor is AccessControl {
 
     function finaliseQuarter(uint256 poolAmt) external onlyRole(TREASURY_ROLE) {
         Quarter storage q = quarters[currentQtr];
-        require(!q.finalised, "already done");
-
+        // must have at least one vote‐point, otherwise treat as “already done”
+        require(q.totalPoints > 0, "already done");
+        // and of course you can’t close the same quarter twice
+        require(!q.finalised,       "already done");
         require(NRT.transferFrom(msg.sender, address(this), poolAmt), "transfer failed");
 
         q.pool      = poolAmt;
@@ -76,7 +78,10 @@ contract StreakDistributor is AccessControl {
 
         uint256 share = (q.pool * pts) / q.totalPoints;
         claimed[qtr][msg.sender] = true;
-
+        // remove this claimant’s share & points so the next one
+        // (if any) gets the correct “remainder”
+        q.pool        -= share;
+        q.totalPoints -= pts;
         require(NRT.transfer(msg.sender, share), "payout failed");
         emit Claimed(qtr, msg.sender, share);
     }

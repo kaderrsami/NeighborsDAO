@@ -68,8 +68,11 @@ contract NeighborGovToken is ERC20, ERC20Burnable, ERC20Permit, ERC20Votes, Acce
 
     /* ───── Delegate exactly once ───── */
     function delegate(address to) public override {
+        // don’t let people delegate to a non-eligible (i.e. non-whitelisted) address
+        require(_eligible[to], "transfer: not eligible");
+        // only allow one delegation per holder
         require(!hasDelegated[msg.sender], "already delegated");
-        assembly { let tmp := caller() } // ⚙️ 1‑line Yul (homework req.)
+        assembly { let tmp := caller() } // ⚙️ 1-line Yul (homework req.)
         hasDelegated[msg.sender] = true;
         super.delegate(to);
     }
