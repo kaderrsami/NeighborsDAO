@@ -6,7 +6,6 @@ pragma solidity ^0.8.24;
  * @notice Quadratic-weighted Governor with Timelock execution and streak
  *         reward integration.
  */
-
 import "@openzeppelin/contracts/governance/Governor.sol";
 import "@openzeppelin/contracts/governance/extensions/GovernorSettings.sol";
 import "@openzeppelin/contracts/governance/extensions/GovernorVotes.sol";
@@ -26,11 +25,7 @@ contract NeighborGovernor is
 {
     StreakDistributor public distributor;
 
-    constructor(
-        ERC20Votes token,
-        TimelockController timelock,
-        StreakDistributor dist
-    )
+    constructor(ERC20Votes token, TimelockController timelock, StreakDistributor dist)
         Governor("NeighborGovernor")
         GovernorSettings(1 days, 7 days, 0)
         GovernorVotes(token)
@@ -40,11 +35,12 @@ contract NeighborGovernor is
     }
 
     /* ── Quadratic weight ── */
-    function _getVotes(
-        address voter,
-        uint256 blockNumber,
-        bytes memory
-    ) internal view override(Governor, GovernorVotes) returns (uint256) {
+    function _getVotes(address voter, uint256 blockNumber, bytes memory)
+        internal
+        view
+        override(Governor, GovernorVotes)
+        returns (uint256)
+    {
         uint256 raw = super._getVotes(voter, blockNumber, "");
         uint256 z = (raw + 1) / 2;
         uint256 y = raw;
@@ -56,31 +52,17 @@ contract NeighborGovernor is
     }
 
     /* ── Reward hook ── */
-    function castVote(uint256 proposalId, uint8 support)
-        public
-        override(Governor)
-        returns (uint256)
-    {
+    function castVote(uint256 proposalId, uint8 support) public override(Governor) returns (uint256) {
         distributor.addPoint(_msgSender());
         return super.castVote(proposalId, support);
     }
 
     /* ── Quorum 4% ── */
-    function quorum(uint256 blockNumber)
-        public
-        view
-        override(Governor)
-        returns (uint256)
-    {
+    function quorum(uint256 blockNumber) public view override(Governor) returns (uint256) {
         return (token().getPastTotalSupply(blockNumber) * 4) / 100;
     }
 
-    function proposalThreshold()
-        public
-        pure
-        override(Governor, GovernorSettings)
-        returns (uint256)
-    {
+    function proposalThreshold() public pure override(Governor, GovernorSettings) returns (uint256) {
         return 0;
     }
 
@@ -100,11 +82,7 @@ contract NeighborGovernor is
         uint256[] memory values,
         bytes[] memory calldatas,
         bytes32 descriptionHash
-    )
-        internal
-        override(Governor, GovernorTimelockControl)
-        returns (uint48)
-    {
+    ) internal override(Governor, GovernorTimelockControl) returns (uint48) {
         return super._queueOperations(proposalId, targets, values, calldatas, descriptionHash);
     }
 
@@ -136,12 +114,7 @@ contract NeighborGovernor is
         return super._cancel(targets, values, calldatas, descriptionHash);
     }
 
-    function _executor()
-        internal
-        view
-        override(Governor, GovernorTimelockControl)
-        returns (address)
-    {
+    function _executor() internal view override(Governor, GovernorTimelockControl) returns (address) {
         return super._executor();
     }
 }

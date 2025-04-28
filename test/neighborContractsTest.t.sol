@@ -12,11 +12,11 @@ import "../src/StreakDistributor.sol";
 contract NeighborGovTokenTest is Test {
     NeighborGovToken ngt;
     address registrar = vm.addr(1);
-    address alice     = vm.addr(2);
-    address bob       = vm.addr(3);
+    address alice = vm.addr(2);
+    address bob = vm.addr(3);
 
     uint256 constant INITIAL_SUPPLY = 1_000 ether;
-    uint256 constant CAP            = 2_000 ether;
+    uint256 constant CAP = 2_000 ether;
 
     function setUp() public {
         ngt = new NeighborGovToken(INITIAL_SUPPLY, CAP, registrar);
@@ -93,8 +93,8 @@ contract NeighborGovTokenTest is Test {
 contract NeighborRewardTokenTest is Test {
     NeighborRewardToken nrt;
 
-    address treasury  = vm.addr(4);
-    address merchant  = vm.addr(5);
+    address treasury = vm.addr(4);
+    address merchant = vm.addr(5);
 
     uint256 constant CAP = 1_000 ether;
 
@@ -168,12 +168,12 @@ contract NeighborRewardTokenTest is Test {
 └──────────────────────────────────────────────────────────*/
 contract StreakDistributorTest is Test {
     NeighborRewardToken nrt;
-    StreakDistributor   distributor;
+    StreakDistributor distributor;
 
     address governor = vm.addr(6);
     address treasury = vm.addr(7);
-    address voter1   = vm.addr(8);
-    address voter2   = vm.addr(9);
+    address voter1 = vm.addr(8);
+    address voter2 = vm.addr(9);
 
     uint256 constant POOL = 1_000 ether;
 
@@ -213,14 +213,14 @@ contract StreakDistributorTest is Test {
         vm.prank(treasury);
         distributor.finaliseQuarter(100);
 
-        (, , , , bool quarterClosed) = distributor.quarters(0);
+        (,,,, bool quarterClosed) = distributor.quarters(0);
         assertTrue(quarterClosed);
 
         // Second call operates on **quarter 1** and should also succeed
         vm.prank(treasury);
         distributor.finaliseQuarter(50);
-    
-        (, , , , bool quarterClosed1) = distributor.quarters(1);
+
+        (,,,, bool quarterClosed1) = distributor.quarters(1);
         assertTrue(quarterClosed1);
     }
 

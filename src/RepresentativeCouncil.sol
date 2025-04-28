@@ -8,9 +8,11 @@ pragma solidity ^0.8.24;
  * @dev    ✅ AUDIT-FIX: the proposal-hash now includes the governor address
  *         and impact flag, eliminating the spoof / cross-governor DoS vectors.
  */
-
 contract RepresentativeCouncil {
-    enum Impact { Minor, Major }
+    enum Impact {
+        Minor,
+        Major
+    }
 
     uint8 public constant MINOR_THRESH = 2;
     uint8 public constant MAJOR_THRESH = 4;
@@ -30,7 +32,9 @@ contract RepresentativeCouncil {
 
     modifier onlyMember() {
         bool ok;
-        for (uint i; i < members.length; ++i) if (members[i] == msg.sender) ok = true;
+        for (uint256 i; i < members.length; ++i) {
+            if (members[i] == msg.sender) ok = true;
+        }
         require(ok, "not council");
         _;
     }
@@ -42,11 +46,7 @@ contract RepresentativeCouncil {
      * @param impact    Impact level (determines threshold).
      * @param data      Encoded Governor.propose(…) call.
      */
-    function signAndForward(
-        address governor,
-        Impact impact,
-        bytes calldata data
-    ) external onlyMember {
+    function signAndForward(address governor, Impact impact, bytes calldata data) external onlyMember {
         // ✅ FIX — hash binds {governor, impact, data}
         bytes32 h = keccak256(abi.encode(governor, impact, data));
 
@@ -62,7 +62,7 @@ contract RepresentativeCouncil {
             executed[h] = true;
             // no-op placeholder kept for assignment parity
             assembly { /* intentionally left blank */ }
-            (bool ok, ) = governor.call(data);
+            (bool ok,) = governor.call(data);
             require(ok, "governor fail");
         }
     }

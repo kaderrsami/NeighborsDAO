@@ -7,45 +7,38 @@ pragma solidity ^0.8.24;
  * @dev    ✅ AUDIT-FIX: holders de-listed from the whitelist may now transfer
  *         their balance back to the city registrar instead of being locked.
  */
-
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Votes.sol";
-import {AccessControl}              from "@openzeppelin/contracts/access/AccessControl.sol";
+import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 
-contract NeighborGovToken is
-    ERC20, ERC20Burnable, ERC20Permit, ERC20Votes, AccessControl
-{
+contract NeighborGovToken is ERC20, ERC20Burnable, ERC20Permit, ERC20Votes, AccessControl {
     /* ───────────── Roles ───────────── */
-    bytes32 public constant MINTER_ROLE    = keccak256("MINTER_ROLE");
+    bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
     bytes32 public constant WHITELIST_ROLE = keccak256("WHITELIST_ROLE");
 
     /* ───────────── State ───────────── */
     uint256 public immutable CAP;
-    address public immutable REGISTRAR;   // ✅ NEW
+    address public immutable REGISTRAR; // ✅ NEW
 
     mapping(address => bool) private _eligible;
-    mapping(address => bool) public  hasDelegated;
+    mapping(address => bool) public hasDelegated;
 
     /* ───────────── Constructor ─────── */
-    constructor(
-        uint256 initialSupply,
-        uint256 _cap,
-        address cityRegistrar
-    )
+    constructor(uint256 initialSupply, uint256 _cap, address cityRegistrar)
         ERC20("Neighbor Governance Token", "NGT")
         ERC20Permit("Neighbor Governance Token")
     {
         require(_cap > 0, "cap 0");
-        CAP        = _cap;
-        REGISTRAR  = cityRegistrar;       // ✅ store registrar
+        CAP = _cap;
+        REGISTRAR = cityRegistrar; // ✅ store registrar
 
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(DEFAULT_ADMIN_ROLE, cityRegistrar);
-        _grantRole(MINTER_ROLE,        msg.sender);
-        _grantRole(WHITELIST_ROLE,     cityRegistrar);
-        _grantRole(WHITELIST_ROLE,     msg.sender);
+        _grantRole(MINTER_ROLE, msg.sender);
+        _grantRole(WHITELIST_ROLE, cityRegistrar);
+        _grantRole(WHITELIST_ROLE, msg.sender);
 
         _eligible[cityRegistrar] = true;
         _mint(cityRegistrar, initialSupply);
@@ -72,7 +65,9 @@ contract NeighborGovToken is
     /* ───── Delegate exactly once ───── */
     function delegate(address to) public override {
         require(!hasDelegated[msg.sender], "already delegated");
-        assembly { let tmp := caller() }
+        assembly {
+            let tmp := caller()
+        }
         hasDelegated[msg.sender] = true;
         super.delegate(to);
     }
@@ -81,25 +76,20 @@ contract NeighborGovToken is
      *  ✅ FIX — holders NOT on the whitelist may always transfer **to** the
      *           registrar, letting them unwind positions safely.
      */
-    function _update(address from, address to, uint256 value)
-        internal override(ERC20, ERC20Votes)
-    {
+    function _update(address from, address to, uint256 value) internal override(ERC20, ERC20Votes) {
         if (from != address(0) && to != address(0)) {
             bool exempt = (to == REGISTRAR);
-            require(
-                exempt || (_eligible[from] && _eligible[to]),
-                "transfer: not eligible"
-            );
+            require(exempt || (_eligible[from] && _eligible[to]), "transfer: not eligible");
         }
         super._update(from, to, value);
     }
 
     // multiple-inheritance fix for nonces()
-    function nonces(address owner)
-        public view override(ERC20Permit, Nonces) returns (uint256)
-    { return super.nonces(owner); }
+    function nonces(address owner) public view override(ERC20Permit, Nonces) returns (uint256) {
+        return super.nonces(owner);
+    }
 
-    function supportsInterface(bytes4 id)
-        public view override(AccessControl) returns (bool)
-    { return super.supportsInterface(id); }
+    function supportsInterface(bytes4 id) public view override(AccessControl) returns (bool) {
+        return super.supportsInterface(id);
+    }
 }
