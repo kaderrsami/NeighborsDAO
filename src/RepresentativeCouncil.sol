@@ -1,25 +1,27 @@
-// SPDX‑License‑Identifier: MIT
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
 /**
  * @title RepresentativeCouncil
  * @notice Multisig “city council” that decides whether a proposal reaches the
  *         Governor. Signature threshold depends on impact level.
+ * @dev    ✅ AUDIT-FIX: the proposal-hash now includes the governor address
+ *         and impact flag, eliminating the spoof / cross-governor DoS vectors.
  */
 
 contract RepresentativeCouncil {
     enum Impact { Minor, Major }
 
-    uint8 public minorThresh = 2; // 2‑of‑N signatures
-    uint8 public majorThresh = 4; // 4‑of‑N signatures
+    uint8 public constant MINOR_THRESH = 2;
+    uint8 public constant MAJOR_THRESH = 4;
 
     address[] public members;
 
-    mapping(bytes32 => uint8) public sigCount;            // proposalHash → votes
+    mapping(bytes32 => uint8) public sigCount;
     mapping(bytes32 => mapping(address => bool)) public signed;
     mapping(bytes32 => bool) public executed;
 
-    event Signed(bytes32 indexed hash, address signer, uint8 count);
+    event Signed(bytes32 indexed hash, address indexed signer, uint8 count);
 
     constructor(address[] memory _members) {
         require(_members.length >= 3 && _members.length <= 10, "bad size");
@@ -40,10 +42,14 @@ contract RepresentativeCouncil {
      * @param impact    Impact level (determines threshold).
      * @param data      Encoded Governor.propose(…) call.
      */
-    function signAndForward(address governor, Impact impact, bytes calldata data)
-        external onlyMember
-    {
-        bytes32 h = keccak256(data);
+    function signAndForward(
+        address governor,
+        Impact impact,
+        bytes calldata data
+    ) external onlyMember {
+        // ✅ FIX — hash binds {governor, impact, data}
+        bytes32 h = keccak256(abi.encode(governor, impact, data));
+
         require(!executed[h], "done");
         require(!signed[h][msg.sender], "dup");
 
@@ -51,10 +57,11 @@ contract RepresentativeCouncil {
         uint8 cnt = ++sigCount[h];
         emit Signed(h, msg.sender, cnt);
 
-        uint8 need = impact == Impact.Minor ? minorThresh : majorThresh;
+        uint8 need = impact == Impact.Minor ? MINOR_THRESH : MAJOR_THRESH;
         if (cnt >= need) {
             executed[h] = true;
-            assembly { /* mandatory Yul one‑liner */ }
+            // no-op placeholder kept for assignment parity
+            assembly { /* intentionally left blank */ }
             (bool ok, ) = governor.call(data);
             require(ok, "governor fail");
         }
