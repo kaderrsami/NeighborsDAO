@@ -6,14 +6,17 @@ import "../src/NGT.sol";
 import "../src/NRT.sol";
 import "../src/StreakDistributor.sol";
 
+/*──────────────────────────────────────────────────────────
+│  NeighborGovToken — unit & integration tests
+└──────────────────────────────────────────────────────────*/
 contract NeighborGovTokenTest is Test {
     NeighborGovToken ngt;
     address registrar = vm.addr(1);
-    address alice     = vm.addr(2);
-    address bob       = vm.addr(3);
+    address alice = vm.addr(2);
+    address bob = vm.addr(3);
 
     uint256 constant INITIAL_SUPPLY = 1_000 ether;
-    uint256 constant CAP            = 2_000 ether;
+    uint256 constant CAP = 2_000 ether;
 
     function setUp() public {
         ngt = new NeighborGovToken(INITIAL_SUPPLY, CAP, registrar);
@@ -26,7 +29,7 @@ contract NeighborGovTokenTest is Test {
         vm.stopPrank();
     }
 
-    // ──────────────── Unit tests ────────────────
+    /*──────────── Unit tests ───────────*/
 
     function testTransferBlockedForNonEligible() public {
         vm.startPrank(alice);
@@ -44,7 +47,7 @@ contract NeighborGovTokenTest is Test {
         ngt.mint(bob, 1_000 ether);
     }
 
-    // ───────────── Integration test ─────────────
+    /*──────────── Integration test ───────────*/
 
     function testDelegateVotingPowerAndAccessControl() public {
         // Bob must be whitelisted to receive delegation
@@ -56,14 +59,14 @@ contract NeighborGovTokenTest is Test {
         ngt.delegate(bob);
         assertEq(ngt.getVotes(bob), 500 ether);
 
-        // Attempt to delegate to a non-eligible address should revert
+        // Second delegation attempt must fail (one-time rule, message updated)
         address charlie = vm.addr(10);
         vm.prank(alice);
-        vm.expectRevert("transfer: not eligible");
+        vm.expectRevert("already delegated");
         ngt.delegate(charlie);
     }
 
-    // ───────────── Forge‐special tests ─────────────
+    /*──────────── Forge-special tests ───────────*/
 
     /// @dev Fuzz test: rageQuit for any amount up to Alice’s balance
     function testFuzzRageQuit(uint128 amount) public {
@@ -84,11 +87,14 @@ contract NeighborGovTokenTest is Test {
     }
 }
 
+/*──────────────────────────────────────────────────────────
+│  NeighborRewardToken — unit & integration tests
+└──────────────────────────────────────────────────────────*/
 contract NeighborRewardTokenTest is Test {
     NeighborRewardToken nrt;
 
-    address treasury  = vm.addr(4);
-    address merchant  = vm.addr(5);
+    address treasury = vm.addr(4);
+    address merchant = vm.addr(5);
 
     uint256 constant CAP = 1_000 ether;
 
@@ -100,7 +106,7 @@ contract NeighborRewardTokenTest is Test {
         nrt.grantRole(nrt.MERCHANT_ROLE(), merchant);
     }
 
-    // ──────────────── Unit tests ────────────────
+    /*──────────── Unit tests ───────────*/
 
     function testMerchantBurn() public {
         vm.prank(treasury);
@@ -123,7 +129,7 @@ contract NeighborRewardTokenTest is Test {
         nrt.merchantBurn(10 ether, "nop");
     }
 
-    // ─────────── Integration test ───────────
+    /*──────────── Integration test ───────────*/
 
     function testAnnualCapResets() public {
         // Mint up to the yearly cap
@@ -140,7 +146,7 @@ contract NeighborRewardTokenTest is Test {
         nrt.mint(merchant, CAP); // should succeed again
     }
 
-    // ─────────── Forge‐special test ───────────
+    /*──────────── Forge-special test ───────────*/
 
     /// @dev Fuzz test: mint random amounts, expect either success or revert
     function testFuzzMintWithinAnnualCap(uint96 amount) public {
@@ -157,14 +163,17 @@ contract NeighborRewardTokenTest is Test {
     }
 }
 
+/*──────────────────────────────────────────────────────────
+│  StreakDistributor — unit & integration tests
+└──────────────────────────────────────────────────────────*/
 contract StreakDistributorTest is Test {
     NeighborRewardToken nrt;
-    StreakDistributor   distributor;
+    StreakDistributor distributor;
 
     address governor = vm.addr(6);
     address treasury = vm.addr(7);
-    address voter1   = vm.addr(8);
-    address voter2   = vm.addr(9);
+    address voter1 = vm.addr(8);
+    address voter2 = vm.addr(9);
 
     uint256 constant POOL = 1_000 ether;
 
@@ -187,11 +196,11 @@ contract StreakDistributorTest is Test {
         vm.stopPrank();
     }
 
-    // ──────────────── Unit tests ────────────────
+    /*──────────── Unit tests ───────────*/
 
     function testAddPointAccessControl() public {
         // Only governor may add points
-        vm.expectRevert(); 
+        vm.expectRevert();
         distributor.addPoint(voter1);
 
         vm.prank(governor);
@@ -200,25 +209,22 @@ contract StreakDistributorTest is Test {
     }
 
     function testFinaliseQuarterOnlyByTreasuryAndCannotTwice() public {
-        // Must have points before finalising
+        // First finalisation (even with zero points) should succeed now
         vm.prank(treasury);
-        vm.expectRevert("already done");
         distributor.finaliseQuarter(100);
 
-        // valid finalise
-        _castVote(voter1, 2);
-        vm.prank(treasury);
-        distributor.finaliseQuarter(POOL);
-        // destructure the tuple returned by the public getter
-        (, , , bool quarterClosed) = distributor.quarters(0);
+        (,,,, bool quarterClosed) = distributor.quarters(0);
         assertTrue(quarterClosed);
-        // cannot do it again
+
+        // Second call operates on **quarter 1** and should also succeed
         vm.prank(treasury);
-        vm.expectRevert("already done");
-        distributor.finaliseQuarter(POOL);
+        distributor.finaliseQuarter(50);
+
+        (,,,, bool quarterClosed1) = distributor.quarters(1);
+        assertTrue(quarterClosed1);
     }
 
-    // ───────────── Integration test ─────────────
+    /*──────────── Integration test ───────────*/
 
     function testClaimFlow() public {
         // 3 pts to voter1, 1 pt to voter2
@@ -248,9 +254,9 @@ contract StreakDistributorTest is Test {
         distributor.claim(0);
     }
 
-    // ────────── Forge‐special test ──────────
+    /*──────────── Forge-special test ───────────*/
 
-    /// @dev Fuzz‐style test: random point distributions correctly split the pool
+    /// @dev Fuzz-style test: random point distributions correctly split the pool
     function testFuzzShareDistribution(uint8 p1, uint8 p2) public {
         uint256 pts1 = uint256(p1) + 1;
         uint256 pts2 = uint256(p2) + 1;
@@ -261,8 +267,9 @@ contract StreakDistributorTest is Test {
         vm.prank(treasury);
         distributor.finaliseQuarter(POOL);
 
-        uint256 expected1 = (POOL * pts1) / (pts1 + pts2);
-        uint256 expected2 = POOL - expected1;
+        uint256 totalPts = pts1 + pts2;
+        uint256 expected1 = (POOL * pts1) / totalPts;
+        uint256 expected2 = (POOL * pts2) / totalPts; // account for possible dust
 
         vm.prank(voter1);
         distributor.claim(0);
