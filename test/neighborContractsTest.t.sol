@@ -5,6 +5,9 @@ import "forge-std/Test.sol";
 import "../src/NGT.sol";
 import "../src/NRT.sol";
 import "../src/StreakDistributor.sol";
+import "@openzeppelin/contracts/governance/TimelockController.sol";
+import "../src/RepresentativeCouncil.sol";
+import "../src/NeighborGovernor.sol"; 
 
 /*──────────────────────────────────────────────────────────
 │  NeighborGovToken — unit & integration tests
@@ -12,11 +15,11 @@ import "../src/StreakDistributor.sol";
 contract NeighborGovTokenTest is Test {
     NeighborGovToken ngt;
     address registrar = vm.addr(1);
-    address alice = vm.addr(2);
-    address bob = vm.addr(3);
+    address alice     = vm.addr(2);
+    address bob       = vm.addr(3);
 
     uint256 constant INITIAL_SUPPLY = 1_000 ether;
-    uint256 constant CAP = 2_000 ether;
+    uint256 constant CAP            = 2_000 ether;
 
     function setUp() public {
         ngt = new NeighborGovToken(INITIAL_SUPPLY, CAP, registrar);
@@ -59,7 +62,7 @@ contract NeighborGovTokenTest is Test {
         ngt.delegate(bob);
         assertEq(ngt.getVotes(bob), 500 ether);
 
-        // Second delegation attempt must fail (one-time rule, message updated)
+        // Second delegation attempt must fail (one-time rule)
         address charlie = vm.addr(10);
         vm.prank(alice);
         vm.expectRevert("already delegated");
@@ -70,9 +73,9 @@ contract NeighborGovTokenTest is Test {
 
     /// @dev Fuzz test: rageQuit for any amount up to Alice’s balance
     function testFuzzRageQuit(uint128 amount) public {
-        uint256 bal = ngt.balanceOf(alice);
-        vm.assume(amount <= bal);
+        uint256 bal         = ngt.balanceOf(alice);
         uint256 totalBefore = ngt.totalSupply();
+        vm.assume(amount <= bal);
 
         vm.prank(alice);
         ngt.rageQuit(amount);
@@ -92,7 +95,6 @@ contract NeighborGovTokenTest is Test {
 └──────────────────────────────────────────────────────────*/
 contract NeighborRewardTokenTest is Test {
     NeighborRewardToken nrt;
-
     address treasury = vm.addr(4);
     address merchant = vm.addr(5);
 
@@ -153,6 +155,7 @@ contract NeighborRewardTokenTest is Test {
         vm.prank(treasury);
         uint256 already = nrt.mintedThisYear();
         vm.assume(amount <= CAP);
+
         if (already + amount <= CAP) {
             nrt.mint(merchant, amount);
             assertLe(nrt.mintedThisYear(), CAP);
@@ -172,13 +175,13 @@ contract StreakDistributorTest is Test {
 
     address governor = vm.addr(6);
     address treasury = vm.addr(7);
-    address voter1 = vm.addr(8);
-    address voter2 = vm.addr(9);
+    address voter1   = vm.addr(8);
+    address voter2   = vm.addr(9);
 
     uint256 constant POOL = 1_000 ether;
 
     function setUp() public {
-        nrt = new NeighborRewardToken(POOL, treasury);
+        nrt         = new NeighborRewardToken(POOL, treasury);
         distributor = new StreakDistributor(nrt, governor, treasury);
 
         // fund & approve pool
@@ -199,7 +202,6 @@ contract StreakDistributorTest is Test {
     /*──────────── Unit tests ───────────*/
 
     function testAddPointAccessControl() public {
-        // Only governor may add points
         vm.expectRevert();
         distributor.addPoint(voter1);
 
@@ -209,46 +211,37 @@ contract StreakDistributorTest is Test {
     }
 
     function testFinaliseQuarterOnlyByTreasuryAndCannotTwice() public {
-        // First finalisation (even with zero points) should succeed now
         vm.prank(treasury);
         distributor.finaliseQuarter(100);
+        (, , , , bool closed0) = distributor.quarters(0);
+        assertTrue(closed0);
 
-        (,,,, bool quarterClosed) = distributor.quarters(0);
-        assertTrue(quarterClosed);
-
-        // Second call operates on **quarter 1** and should also succeed
         vm.prank(treasury);
         distributor.finaliseQuarter(50);
-
-        (,,,, bool quarterClosed1) = distributor.quarters(1);
-        assertTrue(quarterClosed1);
+        (, , , , bool closed1) = distributor.quarters(1);
+        assertTrue(closed1);
     }
 
     /*──────────── Integration test ───────────*/
 
     function testClaimFlow() public {
-        // 3 pts to voter1, 1 pt to voter2
         _castVote(voter1, 3);
         _castVote(voter2, 1);
 
-        // close quarter & fund pool
         vm.prank(treasury);
         distributor.finaliseQuarter(POOL);
 
         uint256 share1 = (POOL * 3) / 4;
         uint256 share2 = POOL - share1;
 
-        // voter1 claim
         vm.prank(voter1);
         distributor.claim(0);
         assertEq(nrt.balanceOf(voter1), share1);
 
-        // voter2 claim
         vm.prank(voter2);
         distributor.claim(0);
         assertEq(nrt.balanceOf(voter2), share2);
 
-        // second claim should revert
         vm.prank(voter1);
         vm.expectRevert("already claimed");
         distributor.claim(0);
@@ -256,7 +249,6 @@ contract StreakDistributorTest is Test {
 
     /*──────────── Forge-special test ───────────*/
 
-    /// @dev Fuzz-style test: random point distributions correctly split the pool
     function testFuzzShareDistribution(uint8 p1, uint8 p2) public {
         uint256 pts1 = uint256(p1) + 1;
         uint256 pts2 = uint256(p2) + 1;
@@ -267,9 +259,9 @@ contract StreakDistributorTest is Test {
         vm.prank(treasury);
         distributor.finaliseQuarter(POOL);
 
-        uint256 totalPts = pts1 + pts2;
+        uint256 totalPts  = pts1 + pts2;
         uint256 expected1 = (POOL * pts1) / totalPts;
-        uint256 expected2 = (POOL * pts2) / totalPts; // account for possible dust
+        uint256 expected2 = (POOL * pts2) / totalPts;
 
         vm.prank(voter1);
         distributor.claim(0);
@@ -279,4 +271,140 @@ contract StreakDistributorTest is Test {
         assertEq(nrt.balanceOf(voter1), expected1);
         assertEq(nrt.balanceOf(voter2), expected2);
     }
+}
+
+/*──────────────────────────────────────────────────────────
+│  New tests for the post-audit fixes
+└──────────────────────────────────────────────────────────*/
+
+/*—— Test 1: delegateBySig obeys the one-time rule ———————————————*/
+contract NeighborGovTokenSigTest is Test {
+    NeighborGovToken ngt;
+    address alice   = vm.addr(2); uint256 alicePK = 2;
+    address bob     = vm.addr(3);
+    address charlie = vm.addr(4);
+
+    function setUp() public {
+        ngt = new NeighborGovToken(100 ether, 200 ether, vm.addr(1));
+
+        vm.startPrank(vm.addr(1));
+        ngt.whitelist(alice, true);
+        ngt.whitelist(bob, true);
+        ngt.whitelist(charlie, true);
+        ngt.grantRole(ngt.MINTER_ROLE(), vm.addr(1));
+        ngt.mint(alice, 50 ether);
+        vm.stopPrank();
+    }
+
+    function _delegateSig(
+        uint256 pk,
+        address delegatee,
+        uint256 nonce,
+        uint256 expiry
+    ) internal view returns (uint8 v, bytes32 r, bytes32 s) {
+        bytes32 structHash = keccak256(
+            abi.encode(
+                keccak256("Delegation(address delegatee,uint256 nonce,uint256 expiry)"),
+                delegatee,
+                nonce,
+                expiry
+            )
+        );
+        bytes32 digest = keccak256(
+            abi.encodePacked("\x19\x01", ngt.DOMAIN_SEPARATOR(), structHash)
+        );
+        return vm.sign(pk, digest);
+    }
+
+    function testDelegateBySigSingleUse() public {
+        uint256 nonce  = ngt.nonces(alice);
+        uint256 expiry = block.timestamp + 1 hours;
+
+        (uint8 v, bytes32 r, bytes32 s) = _delegateSig(alicePK, bob, nonce,     expiry);
+        ngt.delegateBySig(bob, nonce, expiry, v, r, s);
+        assertEq(ngt.getVotes(bob), 50 ether);
+
+        (v, r, s) = _delegateSig(alicePK, charlie, nonce + 1, expiry);
+        vm.expectRevert("already delegated");
+        ngt.delegateBySig(charlie, nonce + 1, expiry, v, r, s);
+    }
+}
+
+/*—— Test 2: only the RepresentativeCouncil can propose ——————————*/
+contract NeighborGovernorAccessTest is Test {
+    NeighborGovToken       ngt;
+    TimelockController     timelock;
+    RepresentativeCouncil  council;
+    NeighborGovernor       governor;
+    DummyDistributor       distributor;
+
+    address registrar = vm.addr(1);
+    address member1   = vm.addr(11);
+    address member2   = vm.addr(12);
+    address holder    = vm.addr(13);
+
+    function setUp() public {
+        // 1) token & dummy distributor
+        ngt         = new NeighborGovToken(1_000 ether, 2_000 ether, registrar);
+        distributor = new DummyDistributor();
+
+        // 2) whitelist & mint holder
+        vm.startPrank(registrar);
+        ngt.whitelist(holder, true);
+        ngt.grantRole(ngt.MINTER_ROLE(), registrar);
+        ngt.mint(holder, 100 ether);
+        vm.stopPrank();
+
+        // 3) council with two members (Minor threshold = 2)
+        address;
+        members[0] = member1;
+        members[1] = member2;
+        council    = new RepresentativeCouncil(members);
+
+        // 4) timelock & governor
+        timelock = new TimelockController(
+            0,
+            new address,
+            new address,
+            registrar
+        );
+        governor = new NeighborGovernor(
+            ERC20Votes(address(ngt)),
+            timelock,
+            distributor,
+            council
+        );
+
+        timelock.grantRole(timelock.EXECUTOR_ROLE(), address(governor));
+    }
+
+    function testOnlyCouncilCanPropose() public {
+        // ordinary holder → propose() reverts
+        vm.prank(holder);
+        address;
+        uint256;
+        bytes;
+        vm.expectRevert("NeighborGovernor: only council");
+        governor.propose(t, v, c, "invalid");
+
+        // council multisig → propose succeeds
+        bytes memory encoded = abi.encodeWithSelector(
+            governor.propose.selector,
+            new address,
+            new uint256,
+            new bytes,
+            "valid"
+        );
+        vm.prank(member1);
+        council.signAndForward(address(governor), RepresentativeCouncil.Impact.Minor, encoded);
+        vm.prank(member2);
+        council.signAndForward(address(governor), RepresentativeCouncil.Impact.Minor, encoded);
+
+        assertTrue(governor.proposalSnapshot(1) > 0);
+    }
+}
+
+/// @dev Minimal stub to satisfy Governor constructor
+contract DummyDistributor {
+    function addPoint(address) external {}
 }
